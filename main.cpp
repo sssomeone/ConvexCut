@@ -4,157 +4,89 @@
 #include <iostream>
 #include <sstream>
 #include <fstream>
-
 #include <vector>
 #include <set>
 #include <queue>
 #include<math.h>
 #include <map>
 #include <algorithm>
-#include <CGAL/Surface_mesh.h>
-#include <CGAL/convex_hull_2.h>
-#include <CGAL/convex_hull_3.h>
-#include <CGAL/boost/graph/convert_nef_polyhedron_to_polygon_mesh.h>
-#include <CGAL/Exact_integer.h>
-#include <CGAL/Extended_homogeneous.h>
-#include <CGAL/Exact_predicates_exact_constructions_kernel.h>
-#include <CGAL/Polyhedron_3.h>
-#include <CGAL/Nef_polyhedron_3.h>
-//#include <CGAL/Nef_polyhedron_S2.h>
-#include <CGAL/IO/Nef_polyhedron_iostream_3.h>
-#include <CGAL/Aff_transformation_3.h>
-
-
-
+#include <map>
 #include <Eigen/Dense>
 #include <unordered_set>
 #include <Eigen/Dense>
 #include <CGAL/Exact_predicates_exact_constructions_kernel.h>
-
-#include <CGAL/Triangulation_vertex_base_with_info_3.h>
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/Delaunay_triangulation_3.h>
-#include <CGAL/point_generators_3.h>
-#include <CGAL/draw_triangulation_3.h>
-#include <CGAL/Delaunay_triangulation_cell_base_with_circumcenter_3.h>
-#include <CGAL/Delaunay_triangulation_3.h>
-#include <CGAL/point_generators_3.h>
-
+using namespace std;
 
 // typedef CGAL::Simple_cartesian<double> K;  // 使用double类型的核
 typedef CGAL::Exact_predicates_exact_constructions_kernel K;
-typedef CGAL::Delaunay_triangulation_3<K>                   DT3;
-typedef CGAL::Creator_uniform_3<double, K::Point_3>          Creator;
-typedef CGAL::Triangulation_vertex_base_with_info_3<unsigned, K> Points;
-
-
-typedef CGAL::Triangulation_vertex_base_with_info_3<unsigned, K>      Vb;
-typedef CGAL::Delaunay_triangulation_cell_base_with_circumcenter_3<K> Cb;
-typedef CGAL::Triangulation_data_structure_3<Vb, Cb>                            Tds;
-//typedef CGAL::Triangulation_data_structure_3<Vb, Cb, CGAL::Parallel_tag>                            Tds;
-
-typedef CGAL::Delaunay_triangulation_3<K, Tds>                    Delaunay;
-
-using namespace std;
-
-typedef CGAL::Polyhedron_3<K>  Polyhedron;
-typedef CGAL::Polygon_2<K> Polygon_2;
-typedef CGAL::Nef_polyhedron_3<K>  Nef_polyhedron;
-typedef K::Point_3 Point_3;
-typedef K::Point_2 Point_2;
-typedef K::Vector_3 Vector_3;
-typedef K::Plane_3 Plane_3;
-typedef CGAL::Aff_transformation_3<K> Aff_transformation_3;
-typedef Polyhedron::HalfedgeDS             HalfedgeDS;
-
-
-typedef CGAL::Delaunay_triangulation_3<K>                   DT3;
-typedef CGAL::Creator_uniform_3<double, K::Point_3>          Creator;
-typedef CGAL::Triangulation_vertex_base_with_info_3<unsigned, K> Points;
-
-
-typedef CGAL::Triangulation_vertex_base_with_info_3<unsigned, K>      Vb;
-typedef CGAL::Delaunay_triangulation_cell_base_with_circumcenter_3<K> Cb;
-typedef CGAL::Triangulation_data_structure_3<Vb, Cb>                            Tds;
-//typedef CGAL::Triangulation_data_structure_3<Vb, Cb, CGAL::Parallel_tag>                            Tds;
-
-typedef CGAL::Delaunay_triangulation_3<K, Tds>                    Delaunay;
 
 // typedef double REAL;
 typedef K::FT REAL;
 
+#include <random>
 
 struct ConvexPolytope
 {
-	typedef Eigen::Vector<REAL,2> Point2;
 	typedef Eigen::Vector3d Point3;
-
-	const REAL maxHeight=100;
-
+	const REAL maxHeight=10000;
 public:
 	struct Vertex;
 	struct Edge;
 	struct Hyperplane;
 
-	map<int, Vertex> vertexs;
-	map<int, Edge> edges;
-	map<int, Hyperplane> hyperPlanes;
+	std::map<int, Vertex> vertexs;
+	std::map<int, Edge> edges;
+	std::map<int, Hyperplane> hyperPlanes;
 
 	int hyperPlaneId, vertexId, edgeId;
 
 	//点
 	struct Vertex {
 		int hplane[3];
-		Eigen::Matrix<REAL, 3, 1> g[3];
-		REAL w[3];
+		Eigen::Matrix<REAL, 3, 1> AinvW;
 
 		Vertex() {}
 		Vertex(const Vertex& rhs) {
 			for (int i = 0; i < 3; ++i) {
 				hplane[i] = rhs.hplane[i];
-				g[i]=rhs.g[i];
-				w[i]=rhs.w[i];
 			}
+			AinvW = rhs.AinvW;
 		};
 		Point3 get_point()const {
-			Eigen::Matrix<REAL, 3, 1> AinvW;
-			Eigen::Matrix<REAL, 3, 3> A;
-			Eigen::Matrix<REAL, 3, 1> W;
-			for (int i = 0; i < 3; ++i) {
-				A(i, 0) = g[i](0);
-				A(i, 1) = g[i](1);
-				A(i, 2) = g[i](2);
-				W(i) = w[i];
-			}
-			AinvW = A.inverse() * W;
 			return Point3(CGAL::to_double(-AinvW(0, 0)),CGAL::to_double(-AinvW(1, 0)),CGAL::to_double(-AinvW(2, 0)));
 		}
-
+		REAL coord(const int i) {
+			return -AinvW(i, 0);
+		}
 		void setHyperPlane(const int h1, const int h2, const int h3, map<int, Hyperplane>& hyperPlanes) {
 			hplane[0] = h1;
 			hplane[1] = h2;
 			hplane[2] = h3;
-			for (int i=0;i<3;++i) {
-				g[i]=hyperPlanes[hplane[i]].g;
-				w[i]=hyperPlanes[hplane[i]].w;
-			}
+			initGAndw(hyperPlanes);
 		}
-		// void setHyperPlane(const int h1, const int h2, const int h3) {
-		// 	hplane[0] = h1;
-		// 	hplane[1] = h2;
-		// 	hplane[2] = h3;
-		// }
+		void setHyperPlane(const int h1, const int h2, const int h3) {
+			hplane[0] = h1;
+			hplane[1] = h2;
+			hplane[2] = h3;
+		}
 		Vertex& operator=(const Vertex& rhs) {
 			for (int i = 0; i < 3; ++i) {
 				hplane[i] = rhs.hplane[i];
-				g[i] = rhs.g[i];
-				w[i] = rhs.w[i];
 			}
+			AinvW = rhs.AinvW;
 			return *this;
 		}
-		// void initGAndw(map<int, Hyperplane>& hyperPlanes) {
-		//
-		// }
+		void initGAndw(map<int, Hyperplane>& hyperPlanes) {
+			Eigen::Matrix<REAL, 3, 3> A;
+			Eigen::Matrix<REAL, 3, 1> W;
+			for (int i = 0; i < 3; ++i) {
+				A(i, 0) = hyperPlanes[hplane[i]].g(0);
+				A(i, 1) = hyperPlanes[hplane[i]].g(1);
+				A(i, 2) = hyperPlanes[hplane[i]].g(2);
+				W(i) = hyperPlanes[hplane[i]].w;
+			}
+			AinvW = A.inverse() * W;
+		}
 	};
 
 	//边
@@ -208,28 +140,8 @@ struct Hyperplane {
 	};
 	REAL zero = REAL();
 	VERTEXOFHYPERPLANE onUpperSide(const Vertex& rhs)const {
-		Eigen::Matrix<REAL, 4, 4> A_prime;
-		A_prime << rhs.g[0](0), rhs.g[0](1), rhs.g[0](2), rhs.w[0],
-				   rhs.g[1](0), rhs.g[1](1), rhs.g[1](2), rhs.w[1],
-				   rhs.g[2](0), rhs.g[2](1), rhs.g[2](2), rhs.w[2],
-				   g(0), g(1), g(2), w;
-
-		Eigen::Matrix<REAL, 3, 3> A;
-		A << rhs.g[0](0), rhs.g[0](1), rhs.g[0](2),
-			 rhs.g[1](0), rhs.g[1](1), rhs.g[1](2),
-			 rhs.g[2](0), rhs.g[2](1), rhs.g[2](2);
-		REAL det_A_prime = A_prime.determinant();
-		REAL det_A = A.determinant();
-
-		int sign_det_A_prime = (det_A_prime > zero) ? 1 : ((det_A_prime < zero) ? -1 : 0);
-		int sign_det_A = (det_A > zero) ? 1 : ((det_A < 0) ? -1 : 0);
-		int final_sign = sign_det_A_prime * sign_det_A;
-
-		if (final_sign > 0) { // Example sign adjustment
-			return ONBOTTONSIDE;
-		} else {
-			return ONUPPERSIDE;
-		}
+		REAL value = -(g.transpose() * rhs.AinvW)(0, 0) + w;
+		return value > zero ? ONBOTTONSIDE : ONUPPERSIDE;
 	}
 };
 
@@ -289,14 +201,29 @@ void init() {
 	hyperPlanes[-6].w = -maxHeight;
 
 
-	vertexs[1].setHyperPlane(-1, -4, -5,hyperPlanes);
-	vertexs[2].setHyperPlane(-1, -2, -5,hyperPlanes);
-	vertexs[3].setHyperPlane(-2, -3, -5,hyperPlanes);
-	vertexs[4].setHyperPlane(-3, -4, -5,hyperPlanes);
-	vertexs[5].setHyperPlane(-1, -4, -6,hyperPlanes);
-	vertexs[6].setHyperPlane(-1, -2, -6,hyperPlanes);
-	vertexs[7].setHyperPlane(-2, -3, -6,hyperPlanes);
-	vertexs[8].setHyperPlane(-3, -4, -6,hyperPlanes);
+	vertexs[1].setHyperPlane(-1, -4, -5);
+	vertexs[1].AinvW = Eigen::Matrix<REAL, 3, 1>(maxHeight,-maxHeight,maxHeight);//-+-
+
+	vertexs[2].setHyperPlane(-1, -2, -5);
+	vertexs[2].AinvW = Eigen::Matrix<REAL, 3, 1>(-maxHeight,-maxHeight,maxHeight);//++-
+
+	vertexs[3].setHyperPlane(-2, -3, -5);
+	vertexs[3].AinvW = Eigen::Matrix<REAL, 3, 1>(-maxHeight,maxHeight,maxHeight);//+--
+
+	vertexs[4].setHyperPlane(-3, -4, -5);
+	vertexs[4].AinvW = Eigen::Matrix<REAL, 3, 1>(maxHeight,maxHeight,maxHeight);//---
+
+	vertexs[5].setHyperPlane(-1, -4, -6);
+	vertexs[5].AinvW = Eigen::Matrix<REAL, 3, 1>(maxHeight,-maxHeight,-maxHeight);//-++
+
+	vertexs[6].setHyperPlane(-1, -2, -6);
+	vertexs[6].AinvW = Eigen::Matrix<REAL, 3, 1>(-maxHeight,-maxHeight,-maxHeight);
+
+	vertexs[7].setHyperPlane(-2, -3, -6);
+	vertexs[7].AinvW = Eigen::Matrix<REAL, 3, 1>(-maxHeight,maxHeight,-maxHeight);
+
+	vertexs[8].setHyperPlane(-3, -4, -6);
+	vertexs[8].AinvW = Eigen::Matrix<REAL, 3, 1>(maxHeight,maxHeight,-maxHeight);
 }
 
 int addHyperPlane(const Hyperplane& plane) {
@@ -333,7 +260,10 @@ int addHyperPlane(const Hyperplane& plane) {
 
 		if (useEnd1Useless != ConvexPolytope::Hyperplane::VERTEXOFHYPERPLANE::ONBOTTONSIDE) {
 			Vertex vertex_new;
-			vertex_new.setHyperPlane(e.hplanes[0],e.hplanes[1],hyperPlaneId,hyperPlanes);
+			vertex_new.hplane[0] = e.hplanes[0];
+			vertex_new.hplane[1] = e.hplanes[1];
+			vertex_new.hplane[2] = hyperPlaneId;
+			vertex_new.initGAndw(hyperPlanes);
 			vertexs[++vertexId] = vertex_new;
 			e.p1 = vertexId;
 			verticesInFacet[e.hplanes[0]].insert(vertexId);
@@ -342,7 +272,11 @@ int addHyperPlane(const Hyperplane& plane) {
 		}
 		else if (useEnd2Useless != ConvexPolytope::Hyperplane::VERTEXOFHYPERPLANE::ONBOTTONSIDE) {
 			Vertex vertex_new;
-			vertex_new.setHyperPlane(e.hplanes[0],e.hplanes[1],hyperPlaneId,hyperPlanes);
+
+			vertex_new.hplane[0] = e.hplanes[0];
+			vertex_new.hplane[1] = e.hplanes[1];
+			vertex_new.hplane[2] = hyperPlaneId;
+			vertex_new.initGAndw(hyperPlanes);
 
 			vertexs[++vertexId] = Vertex(vertex_new);
 			e.p2 = vertexId;
@@ -505,7 +439,6 @@ vector<int> constructFace(vector<pair<int,int>>& edges) {
 
 };
 
-#include <random>
 
 struct PlaneParams {
 	double a, b, c, d;
@@ -526,6 +459,7 @@ struct PlaneParams {
 		return d > 0;
 	}
 };
+
 
 /**
  * 随机生成平面参数，使得点(0,0,0)位于平面正侧
@@ -557,16 +491,19 @@ PlaneParams generateRandomPlane(unsigned int seed = 0) {
 	return PlaneParams(a, b, c, d);
 }
 
+#include <chrono>
 int main() {
 	ConvexPolytope polytope;
 	polytope.init();
+	auto start = std::chrono::high_resolution_clock::now();
 	for (int i=0;i<100000;++i) {
 		auto plane = generateRandomPlane();
-		// cout<<"plane "<<plane.a<<" "<<plane.b<<" "<<plane.c<<" "<<plane.d<<endl;
 		polytope.addHyperPlane(ConvexPolytope::Hyperplane(plane.a,plane.b,plane.c,plane.d,2*i));
 		// polytope.addHyperPlane(ConvexPolytope::Hyperplane(plane.a,plane.b,plane.c,plane.d,2*i+1));
-
 	}
+	auto end = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration<double, std::milli>(end - start);
+	std::cout << "nn nanoflann running Time: " << duration.count() << " ms" << std::endl;
 
 	polytope.exportPolyhedronToOBJ("/Users/pengfei/CLionProjects/ConvexCut/data/convex.obj");
 	return 0;
