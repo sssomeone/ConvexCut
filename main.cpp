@@ -105,50 +105,56 @@ public:
 	//点
 	struct Vertex {
 		int hplane[3];
-		Eigen::Matrix<REAL, 3, 1> AinvW;
+		Eigen::Matrix<REAL, 3, 1> g[3];
+		REAL w[3];
 
 		Vertex() {}
 		Vertex(const Vertex& rhs) {
 			for (int i = 0; i < 3; ++i) {
 				hplane[i] = rhs.hplane[i];
+				g[i]=rhs.g[i];
+				w[i]=rhs.w[i];
 			}
-			AinvW = rhs.AinvW;
 		};
 		Point3 get_point()const {
+			Eigen::Matrix<REAL, 3, 1> AinvW;
+			Eigen::Matrix<REAL, 3, 3> A;
+			Eigen::Matrix<REAL, 3, 1> W;
+			for (int i = 0; i < 3; ++i) {
+				A(i, 0) = g[i](0);
+				A(i, 1) = g[i](1);
+				A(i, 2) = g[i](2);
+				W(i) = w[i];
+			}
+			AinvW = A.inverse() * W;
 			return Point3(CGAL::to_double(-AinvW(0, 0)),CGAL::to_double(-AinvW(1, 0)),CGAL::to_double(-AinvW(2, 0)));
 		}
-		REAL coord(const int i) {
-			return -AinvW(i, 0);
-		}
+
 		void setHyperPlane(const int h1, const int h2, const int h3, map<int, Hyperplane>& hyperPlanes) {
 			hplane[0] = h1;
 			hplane[1] = h2;
 			hplane[2] = h3;
-			initGAndw(hyperPlanes);
+			for (int i=0;i<3;++i) {
+				g[i]=hyperPlanes[hplane[i]].g;
+				w[i]=hyperPlanes[hplane[i]].w;
+			}
 		}
-		void setHyperPlane(const int h1, const int h2, const int h3) {
-			hplane[0] = h1;
-			hplane[1] = h2;
-			hplane[2] = h3;
-		}
+		// void setHyperPlane(const int h1, const int h2, const int h3) {
+		// 	hplane[0] = h1;
+		// 	hplane[1] = h2;
+		// 	hplane[2] = h3;
+		// }
 		Vertex& operator=(const Vertex& rhs) {
 			for (int i = 0; i < 3; ++i) {
 				hplane[i] = rhs.hplane[i];
+				g[i] = rhs.g[i];
+				w[i] = rhs.w[i];
 			}
-			AinvW = rhs.AinvW;
 			return *this;
 		}
-		void initGAndw(map<int, Hyperplane>& hyperPlanes) {
-			Eigen::Matrix<REAL, 3, 3> A;
-			Eigen::Matrix<REAL, 3, 1> W;
-			for (int i = 0; i < 3; ++i) {
-				A(i, 0) = hyperPlanes[hplane[i]].g(0);
-				A(i, 1) = hyperPlanes[hplane[i]].g(1);
-				A(i, 2) = hyperPlanes[hplane[i]].g(2);
-				W(i) = hyperPlanes[hplane[i]].w;
-			}
-			AinvW = A.inverse() * W;
-		}
+		// void initGAndw(map<int, Hyperplane>& hyperPlanes) {
+		//
+		// }
 	};
 
 	//边
@@ -202,8 +208,28 @@ struct Hyperplane {
 	};
 	REAL zero = REAL();
 	VERTEXOFHYPERPLANE onUpperSide(const Vertex& rhs)const {
-		REAL value = -(g.transpose() * rhs.AinvW)(0, 0) + w;
-		return value > zero ? ONBOTTONSIDE : ONUPPERSIDE;
+		Eigen::Matrix<REAL, 4, 4> A_prime;
+		A_prime << rhs.g[0](0), rhs.g[0](1), rhs.g[0](2), rhs.w[0],
+				   rhs.g[1](0), rhs.g[1](1), rhs.g[1](2), rhs.w[1],
+				   rhs.g[2](0), rhs.g[2](1), rhs.g[2](2), rhs.w[2],
+				   g(0), g(1), g(2), w;
+
+		Eigen::Matrix<REAL, 3, 3> A;
+		A << rhs.g[0](0), rhs.g[0](1), rhs.g[0](2),
+			 rhs.g[1](0), rhs.g[1](1), rhs.g[1](2),
+			 rhs.g[2](0), rhs.g[2](1), rhs.g[2](2);
+		REAL det_A_prime = A_prime.determinant();
+		REAL det_A = A.determinant();
+
+		int sign_det_A_prime = (det_A_prime > zero) ? 1 : ((det_A_prime < zero) ? -1 : 0);
+		int sign_det_A = (det_A > zero) ? 1 : ((det_A < 0) ? -1 : 0);
+		int final_sign = sign_det_A_prime * sign_det_A;
+
+		if (final_sign > 0) { // Example sign adjustment
+			return ONBOTTONSIDE;
+		} else {
+			return ONUPPERSIDE;
+		}
 	}
 };
 
@@ -263,29 +289,14 @@ void init() {
 	hyperPlanes[-6].w = -maxHeight;
 
 
-	vertexs[1].setHyperPlane(-1, -4, -5);
-	vertexs[1].AinvW = Eigen::Matrix<REAL, 3, 1>(maxHeight,-maxHeight,maxHeight);//-+-
-
-	vertexs[2].setHyperPlane(-1, -2, -5);
-	vertexs[2].AinvW = Eigen::Matrix<REAL, 3, 1>(-maxHeight,-maxHeight,maxHeight);//++-
-
-	vertexs[3].setHyperPlane(-2, -3, -5);
-	vertexs[3].AinvW = Eigen::Matrix<REAL, 3, 1>(-maxHeight,maxHeight,maxHeight);//+--
-
-	vertexs[4].setHyperPlane(-3, -4, -5);
-	vertexs[4].AinvW = Eigen::Matrix<REAL, 3, 1>(maxHeight,maxHeight,maxHeight);//---
-
-	vertexs[5].setHyperPlane(-1, -4, -6);
-	vertexs[5].AinvW = Eigen::Matrix<REAL, 3, 1>(maxHeight,-maxHeight,-maxHeight);//-++
-
-	vertexs[6].setHyperPlane(-1, -2, -6);
-	vertexs[6].AinvW = Eigen::Matrix<REAL, 3, 1>(-maxHeight,-maxHeight,-maxHeight);
-
-	vertexs[7].setHyperPlane(-2, -3, -6);
-	vertexs[7].AinvW = Eigen::Matrix<REAL, 3, 1>(-maxHeight,maxHeight,-maxHeight);
-
-	vertexs[8].setHyperPlane(-3, -4, -6);
-	vertexs[8].AinvW = Eigen::Matrix<REAL, 3, 1>(maxHeight,maxHeight,-maxHeight);
+	vertexs[1].setHyperPlane(-1, -4, -5,hyperPlanes);
+	vertexs[2].setHyperPlane(-1, -2, -5,hyperPlanes);
+	vertexs[3].setHyperPlane(-2, -3, -5,hyperPlanes);
+	vertexs[4].setHyperPlane(-3, -4, -5,hyperPlanes);
+	vertexs[5].setHyperPlane(-1, -4, -6,hyperPlanes);
+	vertexs[6].setHyperPlane(-1, -2, -6,hyperPlanes);
+	vertexs[7].setHyperPlane(-2, -3, -6,hyperPlanes);
+	vertexs[8].setHyperPlane(-3, -4, -6,hyperPlanes);
 }
 
 int addHyperPlane(const Hyperplane& plane) {
@@ -322,10 +333,7 @@ int addHyperPlane(const Hyperplane& plane) {
 
 		if (useEnd1Useless != ConvexPolytope::Hyperplane::VERTEXOFHYPERPLANE::ONBOTTONSIDE) {
 			Vertex vertex_new;
-			vertex_new.hplane[0] = e.hplanes[0];
-			vertex_new.hplane[1] = e.hplanes[1];
-			vertex_new.hplane[2] = hyperPlaneId;
-			vertex_new.initGAndw(hyperPlanes);
+			vertex_new.setHyperPlane(e.hplanes[0],e.hplanes[1],hyperPlaneId,hyperPlanes);
 			vertexs[++vertexId] = vertex_new;
 			e.p1 = vertexId;
 			verticesInFacet[e.hplanes[0]].insert(vertexId);
@@ -334,11 +342,7 @@ int addHyperPlane(const Hyperplane& plane) {
 		}
 		else if (useEnd2Useless != ConvexPolytope::Hyperplane::VERTEXOFHYPERPLANE::ONBOTTONSIDE) {
 			Vertex vertex_new;
-
-			vertex_new.hplane[0] = e.hplanes[0];
-			vertex_new.hplane[1] = e.hplanes[1];
-			vertex_new.hplane[2] = hyperPlaneId;
-			vertex_new.initGAndw(hyperPlanes);
+			vertex_new.setHyperPlane(e.hplanes[0],e.hplanes[1],hyperPlaneId,hyperPlanes);
 
 			vertexs[++vertexId] = Vertex(vertex_new);
 			e.p2 = vertexId;
@@ -410,15 +414,8 @@ vector<int> constructFace(vector<pair<int,int>>& edges) {
 	for (auto cur_edge : edges)
 	{
 		auto e = cur_edge.second;
-		// if (e.hplanes[0] < 0 && e.hplanes[1] < 0) {
-		// 	continue;
-		// }
-		// if (e.hplanes[0]>=0) {
-			regions[e.hplanes[0]].push_back(make_pair(e.p1,e.p2));
-		// }
-		// if (e.hplanes[1]>=0) {
-			regions[e.hplanes[1]].push_back(make_pair(e.p2,e.p1));
-		// }
+		regions[e.hplanes[0]].push_back(make_pair(e.p1,e.p2));
+		regions[e.hplanes[1]].push_back(make_pair(e.p2,e.p1));
 	}
 	vector<pair<int,vector<Eigen::Vector3d>>> result;
 
@@ -563,11 +560,11 @@ PlaneParams generateRandomPlane(unsigned int seed = 0) {
 int main() {
 	ConvexPolytope polytope;
 	polytope.init();
-	for (int i=0;i<1000;++i) {
+	for (int i=0;i<100000;++i) {
 		auto plane = generateRandomPlane();
 		// cout<<"plane "<<plane.a<<" "<<plane.b<<" "<<plane.c<<" "<<plane.d<<endl;
 		polytope.addHyperPlane(ConvexPolytope::Hyperplane(plane.a,plane.b,plane.c,plane.d,2*i));
-		polytope.addHyperPlane(ConvexPolytope::Hyperplane(plane.a,plane.b,plane.c,plane.d,2*i+1));
+		// polytope.addHyperPlane(ConvexPolytope::Hyperplane(plane.a,plane.b,plane.c,plane.d,2*i+1));
 
 	}
 
